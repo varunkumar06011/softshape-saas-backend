@@ -30,15 +30,21 @@ model Owner {
   cuisineType        String?
   seatingCapacity    Int?
   restaurantId       String?   @unique
+  swiggyStoreId      String?
+  zomatoOutletId     String?
+  urbanpiperLinked   Boolean   @default(false)
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
-  sections  TenantSection[]
-  stations  CashierStation[]
-  captains  CaptainLogin[]
-  adminCred AdminCredential?
-  payments  Payment[]
-  menuItems TenantMenuItem[]
+  sections     TenantSection[]
+  stations     CashierStation[]
+  captains     CaptainLogin[]
+  adminCred    AdminCredential?
+  payments     Payment[]
+  menuItems    TenantMenuItem[]
+  orders       Order[]
+  onlineOrders OnlineOrder[]
+  auditLogs    AuditLog[]
 
   @@index([slug])
   @@index([email])
@@ -126,6 +132,95 @@ model TenantMenuItem {
   variants     String?
   isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
+
+  @@index([restaurantId])
+  @@index([ownerId])
+}
+
+model Order {
+  id            String      @id @default(cuid())
+  ownerId       String
+  owner         Owner       @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  restaurantId  String
+  tableId       String
+  tableName     String
+  section       String
+  captainId     String?
+  captainName   String?
+  status        String      @default("OPEN")
+  source        String      @default("DINE_IN")
+  parentOrderId String?
+  billNumber    String?
+  billPrintedAt DateTime?
+  subtotal      Float       @default(0)
+  cgst          Float       @default(0)
+  sgst          Float       @default(0)
+  total         Float       @default(0)
+  paymentMode   String?
+  paidAt        DateTime?
+  note          String?
+  items         OrderItem[]
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@index([restaurantId])
+  @@index([ownerId])
+  @@index([tableId, status])
+}
+
+model OrderItem {
+  id        String  @id @default(cuid())
+  orderId   String
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  menuItemId String?
+  name      String
+  category  String
+  price     Float
+  qty       Int
+  menuType  String  @default("FOOD")
+  isVeg     Boolean @default(true)
+  note      String?
+  kotSent   Boolean @default(false)
+  kotSentAt DateTime?
+
+  @@index([orderId])
+}
+
+model OnlineOrder {
+  id              String   @id @default(cuid())
+  ownerId         String
+  owner           Owner    @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  restaurantId    String
+  platform        String
+  platformOrderId String   @unique
+  customerName    String
+  customerPhone   String?
+  items           Json
+  subtotal        Float
+  taxes           Float
+  total           Float
+  status          String   @default("NEW")
+  autoAccepted    Boolean  @default(false)
+  acceptedAt      DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([restaurantId])
+  @@index([ownerId])
+}
+
+model AuditLog {
+  id                    String   @id @default(cuid())
+  ownerId               String
+  owner                 Owner    @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  restaurantId          String
+  action                String
+  targetId              String
+  targetType            String
+  performedBy           String
+  performedByUsername   String
+  details               Json?
+  createdAt             DateTime @default(now())
 
   @@index([restaurantId])
   @@index([ownerId])

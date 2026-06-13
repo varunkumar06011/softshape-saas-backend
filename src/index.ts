@@ -8,6 +8,10 @@ import onboardingRouter from './routes/onboarding';
 import paymentRouter from './routes/payment';
 import menuRouter from './routes/menu';
 import tenantRouter from './routes/tenant';
+import ordersRouter from './routes/orders';
+import reportsRouter from './routes/reports';
+import adminRouter from './routes/admin';
+import urbanpiperRouter from './routes/urbanpiper';
 
 const app = express();
 const httpServer = createServer(app);
@@ -46,6 +50,10 @@ app.use('/api/onboarding', onboardingRouter);
 app.use('/api/payment', paymentRouter);
 app.use('/api/menu', menuRouter);
 app.use('/api/tenant', tenantRouter);
+app.use('/api/orders', ordersRouter);
+app.use('/api/reports', reportsRouter);
+app.use('/api/admin', adminRouter);
+app.use('/api/urbanpiper', urbanpiperRouter);
 
 // 404
 app.use((_req, res) => res.status(404).json({ error: 'Route not found' }));
