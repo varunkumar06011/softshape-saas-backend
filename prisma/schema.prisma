@@ -131,10 +131,15 @@ model TenantMenuItem {
   isVeg        Boolean  @default(true)
   variants     String?
   isActive     Boolean  @default(true)
+  imageUrl     String?
+  isSpecial    Boolean  @default(false)
+  specialNote  String?
+  station      String   @default("KITCHEN")
   createdAt    DateTime @default(now())
 
   @@index([restaurantId])
   @@index([ownerId])
+  @@index([isSpecial])
 }
 
 model Order {

@@ -312,4 +312,117 @@ router.delete('/:orderId', requireTenantAuth, async (req: Request, res: Response
   }
 });
 
+// POST /api/orders/:orderId/swap-table
+router.post('/:orderId/swap-table', requireOwnerAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { orderId } = req.params;
+    const { newTableId, newTableName, newSection } = req.body;
+    const order = await prisma.order.findUnique({ where: { id: orderId } });
+    if (!order) { res.status(404).json({ error: 'Order not found' }); return; }
+
+    const existing = await prisma.order.findFirst({
+      where: { restaurantId: order.restaurantId, tableId: newTableId, status: { in: ['OPEN', 'BILLED'] } },
+    });
+    if (existing) { res.status(409).json({ error: 'Target table already has a running order' }); return; }
+
+    const updated = await prisma.order.update({
+      where: { id: orderId },
+      data: { tableId: newTableId, tableName: newTableName, section: newSection || '' },
+      include: { items: true },
+    });
+
+    res.json(updated);
+  } catch (err: any) {
+    console.error('[orders/swap-table]', err);
+    res.status(500).json({ error: 'Failed to swap table' });
+  }
+});
+
+// POST /api/orders/:orderId/swap-items
+router.post('/:orderId/swap-items', requireTenantAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { orderId } = req.params;
+    const { targetOrderId, itemIds } = req.body;
+    if (!targetOrderId || !Array.isArray(itemIds) || itemIds.length === 0) {
+      res.status(400).json({ error: 'targetOrderId and itemIds required' });
+      return;
+    }
+
+    await prisma.orderItem.updateMany({
+      where: { id: { in: itemIds }, orderId },
+      data: { orderId: targetOrderId },
+    });
+
+    const [sourceOrder, targetOrder] = await Promise.all([
+      prisma.order.findUnique({ where: { id: orderId }, include: { items: true } }),
+      prisma.order.findUnique({ where: { id: targetOrderId }, include: { items: true } }),
+    ]);
+
+    if (!sourceOrder || !targetOrder) { res.status(404).json({ error: 'Order not found' }); return; }
+
+    const recalc = (order: any) => {
+      const subtotal = order.items.reduce((s: number, i: { price: number; qty: number }) => s + (i.price * i.qty), 0);
+      const cgst = Math.round(subtotal * 0.025 * 100) / 100;
+      const sgst = Math.round(subtotal * 0.025 * 100) / 100;
+      const total = subtotal + cgst + sgst;
+      return { subtotal, cgst, sgst, total };
+    };
+
+    const sCalc = recalc(sourceOrder);
+    const tCalc = recalc(targetOrder);
+
+    const [updatedSource, updatedTarget] = await Promise.all([
+      prisma.order.update({ where: { id: orderId }, data: sCalc, include: { items: true } }),
+      prisma.order.update({ where: { id: targetOrderId }, data: tCalc, include: { items: true } }),
+    ]);
+
+    res.json({ sourceOrder: updatedSource, targetOrder: updatedTarget });
+  } catch (err: any) {
+    console.error('[orders/swap-items]', err);
+    res.status(500).json({ error: 'Failed to swap items' });
+  }
+});
+
+// POST /api/orders/merge
+router.post('/merge', requireTenantAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { sourceOrderId, targetOrderId } = req.body;
+    if (!sourceOrderId || !targetOrderId) { res.status(400).json({ error: 'sourceOrderId and targetOrderId required' }); return; }
+
+    const [source, target] = await Promise.all([
+      prisma.order.findUnique({ where: { id: sourceOrderId }, include: { items: true } }),
+      prisma.order.findUnique({ where: { id: targetOrderId }, include: { items: true } }),
+    ]);
+
+    if (!source || !target) { res.status(404).json({ error: 'Order not found' }); return; }
+    if (source.restaurantId !== target.restaurantId) { res.status(400).json({ error: 'Orders must belong to same restaurant' }); return; }
+
+    await prisma.orderItem.updateMany(
+      { where: { orderId: sourceOrderId }, data: { orderId: targetOrderId } }
+    );
+
+    await prisma.order.update({
+      where: { id: sourceOrderId },
+      data: { status: 'CANCELLED', note: `Merged into #${targetOrderId}` },
+    });
+
+    const allItems = await prisma.orderItem.findMany({ where: { orderId: targetOrderId } });
+    const subtotal = allItems.reduce((s: number, i: { price: number; qty: number }) => s + (i.price * i.qty), 0);
+    const cgst = Math.round(subtotal * 0.025 * 100) / 100;
+    const sgst = Math.round(subtotal * 0.025 * 100) / 100;
+    const total = subtotal + cgst + sgst;
+
+    const updatedTarget = await prisma.order.update({
+      where: { id: targetOrderId },
+      data: { subtotal, cgst, sgst, total },
+      include: { items: true },
+    });
+
+    res.json({ mergedOrder: updatedTarget });
+  } catch (err: any) {
+    console.error('[orders/merge]', err);
+    res.status(500).json({ error: 'Failed to merge orders' });
+  }
+});
+
 export default router;
