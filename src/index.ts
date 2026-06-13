@@ -12,6 +12,8 @@ import ordersRouter from './routes/orders';
 import reportsRouter from './routes/reports';
 import adminRouter from './routes/admin';
 import urbanpiperRouter from './routes/urbanpiper';
+import aiMenuRouter from './routes/ai-menu';
+import marketingRouter from './routes/marketing';
 
 const app = express();
 const httpServer = createServer(app);
@@ -54,6 +56,8 @@ app.use('/api/orders', ordersRouter);
 app.use('/api/reports', reportsRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/urbanpiper', urbanpiperRouter);
+app.use('/api/ai-menu', aiMenuRouter);
+app.use('/api/marketing', marketingRouter);
 
 // 404
 app.use((_req, res) => res.status(404).json({ error: 'Route not found' }));
