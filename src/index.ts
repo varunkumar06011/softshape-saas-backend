@@ -1,0 +1,68 @@
+import 'dotenv/config';
+import express, { Request, Response, NextFunction } from 'express';
+import cors from 'cors';
+import { createServer } from 'http';
+
+import authRouter from './routes/auth';
+import onboardingRouter from './routes/onboarding';
+import paymentRouter from './routes/payment';
+import menuRouter from './routes/menu';
+import tenantRouter from './routes/tenant';
+
+const app = express();
+const httpServer = createServer(app);
+
+const allowedOrigins = [
+  'http://localhost:5173',
+  'http://localhost:4173',
+  'http://localhost:3000',
+  ...(process.env.CORS_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean),
+];
+
+app.use(cors({
+  origin: (origin, cb) => {
+    if (!origin || allowedOrigins.includes(origin) || origin.endsWith('.vercel.app')) {
+      cb(null, true);
+    } else {
+      cb(new Error(`CORS blocked: ${origin}`));
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+}));
+
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Health check
+app.get('/health', (_req, res) => {
+  res.json({ status: 'ok', service: 'softshape-saas-backend', timestamp: new Date().toISOString() });
+});
+
+// Routes
+app.use('/api/auth', authRouter);
+app.use('/api/onboarding', onboardingRouter);
+app.use('/api/payment', paymentRouter);
+app.use('/api/menu', menuRouter);
+app.use('/api/tenant', tenantRouter);
+
+// 404
+app.use((_req, res) => res.status(404).json({ error: 'Route not found' }));
+
+// Error handler
+app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
+  console.error('[Error]', err.message);
+  res.status(500).json({ error: err.message || 'Internal server error' });
+});
+
+const PORT = Number(process.env.PORT) || 4000;
+
+httpServer.listen(PORT, '0.0.0.0', () => {
+  console.log(`[SaaS Backend] Running on port ${PORT}`);
+  console.log(`[SaaS Backend] Health: http://localhost:${PORT}/health`);
+  console.log(`[SaaS Backend] DATABASE_URL set: ${Boolean(process.env.DATABASE_URL)}`);
+  console.log(`[SaaS Backend] Razorpay Key set: ${Boolean(process.env.RAZORPAY_KEY_ID)}`);
+});
+
+export default app;

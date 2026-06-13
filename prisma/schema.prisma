@@ -1,0 +1,132 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Owner {
+  id                 String    @id @default(cuid())
+  name               String
+  email              String    @unique
+  phone              String
+  passwordHash       String
+  restaurantName     String
+  city               String
+  slug               String    @unique
+  plan               String    @default("STARTER")
+  planPaidAt         DateTime?
+  planExpiresAt      DateTime?
+  isActive           Boolean   @default(false)
+  menuUploadedAt     DateTime?
+  onboardingStep     String    @default("REGISTERED")
+  razorpayCustomerId String?
+  logoUrl            String?
+  gstin              String?
+  address            String?
+  cuisineType        String?
+  seatingCapacity    Int?
+  restaurantId       String?   @unique
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  sections  TenantSection[]
+  stations  CashierStation[]
+  captains  CaptainLogin[]
+  adminCred AdminCredential?
+  payments  Payment[]
+  menuItems TenantMenuItem[]
+
+  @@index([slug])
+  @@index([email])
+}
+
+model TenantSection {
+  id            String   @id @default(cuid())
+  ownerId       String
+  owner         Owner    @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  name          String
+  tableCount    Int      @default(4)
+  tableCapacity Int      @default(4)
+  createdAt     DateTime @default(now())
+
+  @@index([ownerId])
+}
+
+model CashierStation {
+  id           String   @id @default(cuid())
+  ownerId      String
+  owner        Owner    @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  restaurantId String
+  stationName  String
+  stationType  String   @default("DINING")
+  menuFilter   String   @default("FOOD")
+  username     String
+  passwordHash String
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  @@unique([restaurantId, username])
+  @@index([restaurantId])
+}
+
+model CaptainLogin {
+  id           String   @id @default(cuid())
+  ownerId      String
+  owner        Owner    @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  restaurantId String
+  captainName  String
+  pin          String
+  initials     String
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  @@index([restaurantId])
+}
+
+model AdminCredential {
+  id           String   @id @default(cuid())
+  ownerId      String   @unique
+  owner        Owner    @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  restaurantId String   @unique
+  username     String
+  passwordHash String
+  createdAt    DateTime @default(now())
+}
+
+model Payment {
+  id                String   @id @default(cuid())
+  ownerId           String
+  owner             Owner    @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  plan              String
+  amount            Int
+  razorpayOrderId   String   @unique
+  razorpayPaymentId String?
+  razorpaySignature String?
+  status            String   @default("PENDING")
+  createdAt         DateTime @default(now())
+  paidAt            DateTime?
+
+  @@index([ownerId])
+}
+
+model TenantMenuItem {
+  id           String   @id @default(cuid())
+  ownerId      String
+  owner        Owner    @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  restaurantId String
+  itemName     String
+  category     String
+  price        Float
+  menuType     String   @default("FOOD")
+  isVeg        Boolean  @default(true)
+  variants     String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  @@index([restaurantId])
+  @@index([ownerId])
+}
