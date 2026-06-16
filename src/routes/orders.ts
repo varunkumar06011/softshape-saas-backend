@@ -106,7 +106,7 @@ router.get('/:restaurantId/active', async (req: Request, res: Response): Promise
   try {
     const { restaurantId } = req.params;
     const orders = await prisma.order.findMany({
-      where: { restaurantId, status: { notIn: ['SETTLED', 'CANCELLED'] } },
+      where: { restaurantId, isExcluded: false, status: { notIn: ['SETTLED', 'CANCELLED'] } },
       include: { items: true },
       orderBy: { createdAt: 'desc' }
     });
@@ -253,6 +253,19 @@ router.post('/:id/settle', async (req: Request, res: Response): Promise<void> =>
       include: { items: true }
     });
 
+    await prisma.auditLog.create({
+      data: {
+        ownerId: order.ownerId,
+        restaurantId: order.restaurantId,
+        action: 'ORDER_SETTLED',
+        targetId: order.id,
+        targetType: 'Order',
+        performedBy: req.body.performedBy || '',
+        performedByUsername: req.body.performedByUsername || '',
+        details: { paymentMode, settledAt: new Date().toISOString() },
+      }
+    });
+
     io.to(order.restaurantId).emit('order-settled', { orderId: order.id, tableId: order.tableId });
     res.json(updated);
   } catch (err: any) {
@@ -272,6 +285,19 @@ router.post('/:id/swap-table', async (req: Request, res: Response): Promise<void
       where: { id: req.params.id },
       data: { tableId: newTableId, tableName: newTableName, section: newSection || order.section },
       include: { items: true }
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        ownerId: order.ownerId,
+        restaurantId: order.restaurantId,
+        action: 'TABLE_SWAPPED',
+        targetId: order.id,
+        targetType: 'Order',
+        performedBy: req.body.performedBy || '',
+        performedByUsername: req.body.performedByUsername || '',
+        details: { fromTable: order.tableName, toTable: newTableName, swappedAt: new Date().toISOString() },
+      }
     });
 
     io.to(order.restaurantId).emit('order-updated', updated);
@@ -483,6 +509,137 @@ router.post('/sync-batch', async (req: Request, res: Response): Promise<void> =>
   } catch (err: any) {
     console.error('[orders/sync-batch]', err);
     res.status(500).json({ error: 'Batch sync failed' });
+  }
+});
+
+// POST /api/orders/:id/exclude
+router.post('/:id/exclude', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { reason, performedBy, performedByUsername } = req.body;
+    const order = await prisma.order.findUnique({ where: { id: req.params.id } });
+    if (!order) { res.status(404).json({ error: 'Order not found' }); return; }
+
+    const updated = await prisma.order.update({
+      where: { id: req.params.id },
+      data: { status: 'EXCLUDED', isExcluded: true, excludedAt: new Date(), excludedBy: performedByUsername || '', excludedReason: reason || '' },
+      include: { items: true }
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        ownerId: order.ownerId,
+        restaurantId: order.restaurantId,
+        action: 'TRANSACTION_EXCLUDED',
+        targetId: order.id,
+        targetType: 'Order',
+        performedBy: performedBy || '',
+        performedByUsername: performedByUsername || '',
+        details: { reason, excludedAt: new Date().toISOString() },
+      }
+    });
+
+    io.to(order.restaurantId).emit('order-excluded', { orderId: order.id });
+    res.json(updated);
+  } catch (err: any) {
+    console.error('[orders/exclude]', err);
+    res.status(500).json({ error: 'Failed to exclude order' });
+  }
+});
+
+// POST /api/orders/:id/reopen
+router.post('/:id/reopen', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { performedBy, performedByUsername } = req.body;
+    const order = await prisma.order.findUnique({ where: { id: req.params.id } });
+    if (!order) { res.status(404).json({ error: 'Order not found' }); return; }
+
+    const updated = await prisma.order.update({
+      where: { id: req.params.id },
+      data: { status: 'OPEN', paidAt: null, billPrintedAt: null, billNumber: null },
+      include: { items: true }
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        ownerId: order.ownerId,
+        restaurantId: order.restaurantId,
+        action: 'BILL_REOPENED',
+        targetId: order.id,
+        targetType: 'Order',
+        performedBy: performedBy || '',
+        performedByUsername: performedByUsername || '',
+        details: { reopenedAt: new Date().toISOString(), previousStatus: order.status },
+      }
+    });
+
+    io.to(order.restaurantId).emit('bill-reopened', { orderId: order.id });
+    res.json(updated);
+  } catch (err: any) {
+    console.error('[orders/reopen]', err);
+    res.status(500).json({ error: 'Failed to reopen order' });
+  }
+});
+
+// POST /api/orders/:id/refund
+router.post('/:id/refund', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { performedBy, performedByUsername, refundReason } = req.body;
+    const order = await prisma.order.findUnique({ where: { id: req.params.id } });
+    if (!order) { res.status(404).json({ error: 'Order not found' }); return; }
+
+    const updated = await prisma.order.update({
+      where: { id: req.params.id },
+      data: { status: 'REFUNDED' },
+      include: { items: true }
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        ownerId: order.ownerId,
+        restaurantId: order.restaurantId,
+        action: 'ORDER_REFUNDED',
+        targetId: order.id,
+        targetType: 'Order',
+        performedBy: performedBy || '',
+        performedByUsername: performedByUsername || '',
+        details: { refundReason, refundedAt: new Date().toISOString() },
+      }
+    });
+
+    res.json(updated);
+  } catch (err: any) {
+    console.error('[orders/refund]', err);
+    res.status(500).json({ error: 'Failed to refund order' });
+  }
+});
+
+// GET /api/orders/search/:restaurantId
+router.get('/search/:restaurantId', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { restaurantId } = req.params;
+    const { billNo, mobileNo, date, tableId, amount, cashier } = req.query;
+
+    const where: any = { restaurantId };
+    if (billNo) where.billNumber = { contains: String(billNo) };
+    if (tableId) where.tableId = String(tableId);
+    if (amount) where.total = Number(amount);
+    if (cashier) where.captainName = { contains: String(cashier) };
+    if (date) {
+      const d = new Date(String(date));
+      const next = new Date(d); next.setDate(next.getDate() + 1);
+      where.createdAt = { gte: d, lt: next };
+    }
+
+    const orders = await prisma.order.findMany({
+      where,
+      include: { items: true },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    });
+    res.json(orders);
+  } catch (err: any) {
+    console.error('[orders/search]', err);
+    res.status(500).json({ error: 'Failed to search orders' });
   }
 });
 

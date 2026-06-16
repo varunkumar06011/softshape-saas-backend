@@ -95,6 +95,10 @@ model CashierStation {
   isActive           Boolean  @default(true)
   allowedSections    String?  @default("[]")
   handleOnlineOrders Boolean  @default(false)
+  canReopen          Boolean  @default(false)
+  canExclude         Boolean  @default(true)
+  canDiscount        Boolean  @default(false)
+  canRefund          Boolean  @default(false)
   createdAt          DateTime @default(now())
 
   @@unique([restaurantId, username])
@@ -187,6 +191,12 @@ model Order {
   paymentMode   String?
   paidAt        DateTime?
   note          String?
+  isExcluded    Boolean   @default(false)
+  excludedAt    DateTime?
+  excludedBy    String?
+  excludedReason String?
+  discountAmount Float    @default(0)
+  discountReason String?
   items         OrderItem[]
   clientId      String?     @unique
   deviceId      String?

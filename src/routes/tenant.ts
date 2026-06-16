@@ -89,7 +89,7 @@ router.post('/:slug/login', async (req: Request, res: Response): Promise<void> =
       if (!valid || station.username !== username) { res.status(401).json({ error: 'Invalid credentials' }); return; }
 
       const token = signTenantToken({ restaurantId, slug, role: 'cashier', stationId: station.id, menuFilter: station.menuFilter, menuUploaded, allowedSections: station.allowedSections || '[]', handleOnlineOrders: station.handleOnlineOrders });
-      res.json({ token, session: { restaurantId, slug, role: 'cashier', stationId: station.id, stationName: station.stationName, menuFilter: station.menuFilter, menuUploaded, allowedSections: station.allowedSections || '[]', handleOnlineOrders: station.handleOnlineOrders, restaurantName: owner.restaurantName, billTemplate: owner.billTemplate } });
+      res.json({ token, session: { restaurantId, slug, role: 'cashier', stationId: station.id, stationName: station.stationName, menuFilter: station.menuFilter, menuUploaded, allowedSections: station.allowedSections || '[]', handleOnlineOrders: station.handleOnlineOrders, restaurantName: owner.restaurantName, billTemplate: owner.billTemplate, canReopen: station.canReopen, canExclude: station.canExclude, canDiscount: station.canDiscount, canRefund: station.canRefund } });
       return;
     }
 
