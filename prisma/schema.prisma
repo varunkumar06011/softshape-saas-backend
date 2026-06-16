@@ -29,6 +29,8 @@ model Owner {
   address            String?
   cuisineType        String?
   seatingCapacity    Int?
+  restaurantType     String?
+  outletCount        String?
   restaurantId       String?   @unique
   swiggyStoreId      String?
   zomatoOutletId     String?

@@ -9,9 +9,9 @@ const router = Router();
 // POST /api/auth/register
 router.post('/register', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { name, email, phone, password, restaurantName, city } = req.body;
+    const { name, email, phone, password, restaurantName, city, restaurantType, outletCount } = req.body;
 
-    if (!name || !email || !phone || !password || !restaurantName || !city) {
+    if (!name || !email || !phone || !password || !restaurantName || !city || !restaurantType || !outletCount) {
       res.status(400).json({ error: 'All fields are required' });
       return;
     }
@@ -41,7 +41,7 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
     const slug = generateSlug(restaurantName);
 
     const owner = await prisma.owner.create({
-      data: { name, email, phone, passwordHash, restaurantName, city, slug },
+      data: { name, email, phone, passwordHash, restaurantName, city, slug, restaurantType, outletCount },
     });
 
     const token = signOwnerToken({ ownerId: owner.id, restaurantId: owner.restaurantId || '', slug: owner.slug, role: 'owner' });
