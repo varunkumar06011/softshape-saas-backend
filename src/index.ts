@@ -2,15 +2,28 @@ import 'dotenv/config';
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import { createServer } from 'http';
+import { Server } from 'socket.io';
 
+import prisma from './lib/prisma';
 import authRouter from './routes/auth';
 import onboardingRouter from './routes/onboarding';
 import paymentRouter from './routes/payment';
 import menuRouter from './routes/menu';
 import tenantRouter from './routes/tenant';
+import ordersRouter from './routes/orders';
+import reportsRouter from './routes/reports';
+import urbanpiperRouter from './routes/urbanpiper';
 
 const app = express();
 const httpServer = createServer(app);
+
+const io = new Server(httpServer, { cors: { origin: '*' } });
+io.on('connection', (socket: any) => {
+  socket.on('join-restaurant', (restaurantId: string) => {
+    socket.join(restaurantId);
+  });
+});
+export { io };
 
 const allowedOrigins = [
   'http://localhost:5173',
@@ -46,6 +59,9 @@ app.use('/api/onboarding', onboardingRouter);
 app.use('/api/payment', paymentRouter);
 app.use('/api/menu', menuRouter);
 app.use('/api/tenant', tenantRouter);
+app.use('/api/orders', ordersRouter);
+app.use('/api/reports', reportsRouter);
+app.use('/api/urbanpiper', urbanpiperRouter);
 
 // 404
 app.use((_req, res) => res.status(404).json({ error: 'Route not found' }));
@@ -64,5 +80,14 @@ httpServer.listen(PORT, '0.0.0.0', () => {
   console.log(`[SaaS Backend] DATABASE_URL set: ${Boolean(process.env.DATABASE_URL)}`);
   console.log(`[SaaS Backend] Razorpay Key set: ${Boolean(process.env.RAZORPAY_KEY_ID)}`);
 });
+
+// Refresh materialized view every 5 minutes
+setInterval(async () => {
+  try {
+    await prisma.$executeRaw`REFRESH MATERIALIZED VIEW CONCURRENTLY daily_revenue_mv`;
+  } catch (e: any) {
+    console.warn('MV refresh failed:', e.message);
+  }
+}, 5 * 60 * 1000);
 
 export default app;

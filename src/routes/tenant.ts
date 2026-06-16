@@ -5,6 +5,35 @@ import { signTenantToken } from '../lib/jwt';
 
 const router = Router();
 
+// GET /api/tenant/sections/:restaurantId — public, no auth required
+router.get('/sections/:restaurantId', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { restaurantId } = req.params;
+    const owner = await prisma.owner.findUnique({ where: { restaurantId } });
+    if (!owner) { res.status(404).json({ error: 'Restaurant not found' }); return; }
+
+    const sections = await prisma.tenantSection.findMany({ where: { ownerId: owner.id } });
+    const tables: Array<{ id: string; label: string; section: string; status: string }> = [];
+
+    for (const section of sections) {
+      for (let i = 1; i <= section.tableCount; i++) {
+        const short = section.name.replace(/\s+/g, '-');
+        tables.push({
+          id: `${short}-${i}`,
+          label: `${short}-${i}`,
+          section: section.name,
+          status: 'free',
+        });
+      }
+    }
+
+    res.json({ sections, tables });
+  } catch (err) {
+    console.error('[tenant/sections]', err);
+    res.status(500).json({ error: 'Failed to load sections' });
+  }
+});
+
 // GET /api/tenant/:slug — public info for portal landing page
 router.get('/:slug', async (req: Request, res: Response): Promise<void> => {
   try {

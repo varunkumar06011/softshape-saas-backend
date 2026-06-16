@@ -130,3 +130,28 @@ model TenantMenuItem {
   @@index([restaurantId])
   @@index([ownerId])
 }
+
+model Order {
+  id           String    @id @default(cuid())
+  restaurantId String
+  tableId      String?
+  items        String    @default("[]")
+  status       String    @default("RUNNING")
+  source       String    @default("DINE_IN")
+  paymentMode  String?
+  subtotal     Float?
+  cgst         Float?
+  sgst         Float?
+  total        Float?
+  paidAt       DateTime?
+  clientId     String?   @unique
+  deviceId     String?
+  syncedAt     DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([restaurantId])
+  @@index([status])
+  @@index([clientId])
+  @@index([paidAt])
+}
