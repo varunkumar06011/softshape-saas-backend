@@ -4,21 +4,43 @@ import { io } from '../index';
 
 const router = Router();
 
+async function getOwnerId(restaurantId: string): Promise<string | null> {
+  const owner = await prisma.owner.findUnique({ where: { restaurantId }, select: { id: true } });
+  return owner?.id || null;
+}
+
 // POST /api/urbanpiper/webhook — receive orders from UrbanPiper / Swiggy / Zomato
 router.post('/webhook', async (req: Request, res: Response): Promise<void> => {
   try {
     const { restaurantId, platform, externalOrderId, customerName, items, total, status } = req.body;
     if (!restaurantId) { res.status(400).json({ error: 'restaurantId required' }); return; }
 
+    const ownerId = await getOwnerId(restaurantId);
+    if (!ownerId) { res.status(404).json({ error: 'Restaurant not found' }); return; }
+
+    const itemList = (items || []) as any[];
     const order = await prisma.order.create({
       data: {
+        ownerId,
         restaurantId,
-        tableId: null,
-        items: JSON.stringify(items || []),
+        tableId: '',
+        tableName: customerName || (platform?.toUpperCase() || 'ONLINE'),
+        section: platform?.toUpperCase() || 'ONLINE',
         status: status || 'NEW',
         source: platform?.toUpperCase() || 'ONLINE',
         total: total || 0,
-      }
+        items: { create: itemList.map((i: any) => ({
+          menuItemId: null,
+          name: i.name || 'Item',
+          category: i.category || '',
+          price: i.price || 0,
+          qty: i.qty || 1,
+          menuType: i.menuType || 'FOOD',
+          isVeg: i.isVeg !== false,
+          note: i.note || undefined,
+        })) },
+      },
+      include: { items: true }
     });
 
     io.to(restaurantId).emit('online-order', order);
@@ -37,6 +59,7 @@ router.get('/orders/:restaurantId', async (req: Request, res: Response): Promise
         restaurantId: req.params.restaurantId,
         source: { in: ['SWIGGY', 'ZOMATO', 'ONLINE'] },
       },
+      include: { items: true },
       orderBy: { createdAt: 'desc' },
     });
     res.json(orders);
