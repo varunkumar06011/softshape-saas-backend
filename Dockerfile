@@ -17,4 +17,4 @@ RUN npx prisma generate && npm run build
 ENV NODE_ENV=production
 EXPOSE 4000
 
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/index.js"]
+CMD ["sh", "-c", "npx prisma migrate resolve --applied 20240615000000_add_sync_fields && npx prisma migrate deploy && node dist/index.js"]
