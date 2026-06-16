@@ -74,28 +74,69 @@ router.post('/upload-csv', requireOwnerAuth, upload.single('file'), async (req: 
 router.get('/:restaurantId', async (req: Request, res: Response): Promise<void> => {
   try {
     const { restaurantId } = req.params;
-    const { type } = req.query;
+    const { type, section } = req.query;
 
     const where: any = { restaurantId, isActive: true };
     if (type && type !== 'BOTH') where.menuType = String(type).toUpperCase();
 
     const items = await prisma.tenantMenuItem.findMany({ where, orderBy: [{ category: 'asc' }, { itemName: 'asc' }] });
 
+    const sectionName = section ? String(section) : undefined;
+
     const grouped: Record<string, any[]> = {};
     for (const item of items) {
       if (!grouped[item.category]) grouped[item.category] = [];
+
+      let effectivePrice = item.price;
+      let overrides: Record<string, number> = {};
+      try { overrides = item.priceOverrides ? JSON.parse(item.priceOverrides) : {}; } catch {}
+      if (sectionName && overrides[sectionName]) effectivePrice = overrides[sectionName];
+
       grouped[item.category].push({
-        id: item.id, name: item.itemName, price: item.price,
+        id: item.id, name: item.itemName, price: effectivePrice,
         menuType: item.menuType, isVeg: item.isVeg,
         station: item.station, imageUrl: item.imageUrl,
         isSpecial: item.isSpecial, specialNote: item.specialNote,
         variants: item.variants ? JSON.parse(item.variants) : [],
+        priceOverrides: item.priceOverrides,
       });
     }
 
     res.json({ categories: grouped, total: items.length });
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch menu' });
+  }
+});
+
+// GET /api/menu/:restaurantId/items — flat item list with section-adjusted prices
+router.get('/:restaurantId/items', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { restaurantId } = req.params;
+    const { type, section } = req.query;
+
+    const where: any = { restaurantId, isActive: true };
+    if (type && type !== 'BOTH') where.menuType = String(type).toUpperCase();
+
+    const items = await prisma.tenantMenuItem.findMany({ where, orderBy: [{ category: 'asc' }, { itemName: 'asc' }] });
+
+    const sectionName = section ? String(section) : undefined;
+
+    res.json(items.map(item => {
+      let effectivePrice = item.price;
+      let overrides: Record<string, number> = {};
+      try { overrides = item.priceOverrides ? JSON.parse(item.priceOverrides) : {}; } catch {}
+      if (sectionName && overrides[sectionName]) effectivePrice = overrides[sectionName];
+      return {
+        id: item.id, name: item.itemName, category: item.category,
+        price: effectivePrice, menuType: item.menuType, isVeg: item.isVeg,
+        station: item.station, imageUrl: item.imageUrl,
+        isSpecial: item.isSpecial, specialNote: item.specialNote,
+        variants: item.variants ? JSON.parse(item.variants) : [],
+        priceOverrides: item.priceOverrides,
+      };
+    }));
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch items' });
   }
 });
 
@@ -124,7 +165,7 @@ router.post('/item', requireOwnerAuth, async (req: Request, res: Response): Prom
     const owner = await prisma.owner.findUnique({ where: { id: ownerId } });
     if (!owner) { res.status(404).json({ error: 'Owner not found' }); return; }
 
-    const { itemName, category, price, isVeg, menuType, station, variants, imageUrl, isSpecial, specialNote } = req.body;
+    const { itemName, category, price, isVeg, menuType, station, variants, imageUrl, isSpecial, specialNote, priceOverrides } = req.body;
     if (!itemName || !category || price == null) {
       res.status(400).json({ error: 'itemName, category, and price are required' });
       return;
@@ -141,6 +182,7 @@ router.post('/item', requireOwnerAuth, async (req: Request, res: Response): Prom
         menuType: (menuType || 'FOOD').toUpperCase(),
         station: (station || 'KITCHEN').toUpperCase(),
         variants: variants ? JSON.stringify(variants) : null,
+        priceOverrides: priceOverrides ? JSON.stringify(priceOverrides) : null,
         imageUrl: imageUrl || null,
         isSpecial: isSpecial === true,
         specialNote: specialNote || null,
@@ -159,7 +201,7 @@ router.patch('/item/:id', requireOwnerAuth, async (req: Request, res: Response):
   try {
     const { ownerId } = (req as any).owner;
     const { id } = req.params;
-    const { itemName, category, price, isVeg, menuType, station, isActive, isSpecial, specialNote, imageUrl, variants } = req.body;
+    const { itemName, category, price, isVeg, menuType, station, isActive, isSpecial, specialNote, imageUrl, variants, priceOverrides } = req.body;
 
     const data: any = {};
     if (itemName !== undefined) data.itemName = itemName;
@@ -173,6 +215,7 @@ router.patch('/item/:id', requireOwnerAuth, async (req: Request, res: Response):
     if (specialNote !== undefined) data.specialNote = specialNote;
     if (imageUrl !== undefined) data.imageUrl = imageUrl;
     if (variants !== undefined) data.variants = variants ? JSON.stringify(variants) : null;
+    if (priceOverrides !== undefined) data.priceOverrides = priceOverrides ? JSON.stringify(priceOverrides) : null;
 
     const item = await prisma.tenantMenuItem.updateMany({
       where: { id, ownerId },

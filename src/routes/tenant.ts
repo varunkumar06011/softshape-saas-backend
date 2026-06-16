@@ -40,7 +40,7 @@ router.get('/:slug', async (req: Request, res: Response): Promise<void> => {
     const { slug } = req.params;
     const owner = await prisma.owner.findUnique({
       where: { slug },
-      include: { stations: { select: { id: true, stationName: true, stationType: true, menuFilter: true } } },
+      include: { stations: { select: { id: true, stationName: true, stationType: true, menuFilter: true, allowedSections: true, handleOnlineOrders: true } } },
     });
     if (!owner) { res.status(404).json({ error: 'Restaurant not found' }); return; }
     if (!owner.isActive) { res.status(403).json({ error: 'This account is not yet active. Please complete payment.' }); return; }
@@ -88,8 +88,8 @@ router.post('/:slug/login', async (req: Request, res: Response): Promise<void> =
       const valid = await bcrypt.compare(password, station.passwordHash);
       if (!valid || station.username !== username) { res.status(401).json({ error: 'Invalid credentials' }); return; }
 
-      const token = signTenantToken({ restaurantId, slug, role: 'cashier', stationId: station.id, menuFilter: station.menuFilter, menuUploaded });
-      res.json({ token, session: { restaurantId, slug, role: 'cashier', stationId: station.id, stationName: station.stationName, menuFilter: station.menuFilter, menuUploaded, restaurantName: owner.restaurantName } });
+      const token = signTenantToken({ restaurantId, slug, role: 'cashier', stationId: station.id, menuFilter: station.menuFilter, menuUploaded, allowedSections: station.allowedSections || '[]', handleOnlineOrders: station.handleOnlineOrders });
+      res.json({ token, session: { restaurantId, slug, role: 'cashier', stationId: station.id, stationName: station.stationName, menuFilter: station.menuFilter, menuUploaded, allowedSections: station.allowedSections || '[]', handleOnlineOrders: station.handleOnlineOrders, restaurantName: owner.restaurantName } });
       return;
     }
 

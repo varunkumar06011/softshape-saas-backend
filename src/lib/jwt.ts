@@ -18,6 +18,8 @@ export interface TenantTokenPayload {
   menuFilter?: string;
   captainId?: string;
   menuUploaded: boolean;
+  allowedSections?: string;
+  handleOnlineOrders?: boolean;
 }
 
 export function signOwnerToken(payload: TokenPayload): string {

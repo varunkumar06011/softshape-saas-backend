@@ -63,17 +63,19 @@ model TenantSection {
 }
 
 model CashierStation {
-  id           String   @id @default(cuid())
-  ownerId      String
-  owner        Owner    @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  restaurantId String
-  stationName  String
-  stationType  String   @default("DINING")
-  menuFilter   String   @default("FOOD")
-  username     String
-  passwordHash String
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
+  id                 String   @id @default(cuid())
+  ownerId            String
+  owner              Owner    @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  restaurantId       String
+  stationName        String
+  stationType        String   @default("DINING")
+  menuFilter         String   @default("FOOD")
+  username           String
+  passwordHash       String
+  isActive           Boolean  @default(true)
+  allowedSections    String?  @default("[]")
+  handleOnlineOrders Boolean  @default(false)
+  createdAt          DateTime @default(now())
 
   @@unique([restaurantId, username])
   @@index([restaurantId])
@@ -134,8 +136,9 @@ model TenantMenuItem {
   imageUrl     String?
   isSpecial    Boolean  @default(false)
   specialNote  String?
-  station      String   @default("KITCHEN")
-  createdAt    DateTime @default(now())
+  station         String   @default("KITCHEN")
+  priceOverrides  String?   @default("{}")
+  createdAt       DateTime @default(now())
 
   @@index([restaurantId])
   @@index([ownerId])

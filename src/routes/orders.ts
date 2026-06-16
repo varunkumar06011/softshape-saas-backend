@@ -36,6 +36,30 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     }
 
     const itemList = (items || []) as any[];
+
+    // Apply section-based price overrides server-side
+    if (section) {
+      const menuItemIds = itemList.map(i => i.menuItemId).filter(Boolean);
+      if (menuItemIds.length > 0) {
+        const menuItems = await prisma.tenantMenuItem.findMany({
+          where: { id: { in: menuItemIds } },
+          select: { id: true, priceOverrides: true },
+        });
+        const overrideMap = new Map<string, number>();
+        for (const mi of menuItems) {
+          try {
+            const po = mi.priceOverrides ? JSON.parse(mi.priceOverrides) : {};
+            if (po[section]) overrideMap.set(mi.id, po[section]);
+          } catch {}
+        }
+        for (const item of itemList) {
+          if (item.menuItemId && overrideMap.has(item.menuItemId)) {
+            item.price = overrideMap.get(item.menuItemId)!;
+          }
+        }
+      }
+    }
+
     const totals = calcTotals(itemList);
 
     const order = await prisma.order.create({
@@ -327,6 +351,30 @@ router.post('/sync-batch', async (req: Request, res: Response): Promise<void> =>
           const ownerId = await getOwnerId(p.restaurantId);
           if (!ownerId) { results.push({ id: m.id, status: 'error', message: 'Restaurant not found' }); continue; }
           const itemList = (p.items || []) as any[];
+
+          // Apply section-based price overrides server-side
+          if (p.section) {
+            const menuItemIds = itemList.map(i => i.menuItemId).filter(Boolean);
+            if (menuItemIds.length > 0) {
+              const menuItems = await prisma.tenantMenuItem.findMany({
+                where: { id: { in: menuItemIds } },
+                select: { id: true, priceOverrides: true },
+              });
+              const overrideMap = new Map<string, number>();
+              for (const mi of menuItems) {
+                try {
+                  const po = mi.priceOverrides ? JSON.parse(mi.priceOverrides) : {};
+                  if (po[p.section]) overrideMap.set(mi.id, po[p.section]);
+                } catch {}
+              }
+              for (const item of itemList) {
+                if (item.menuItemId && overrideMap.has(item.menuItemId)) {
+                  item.price = overrideMap.get(item.menuItemId)!;
+                }
+              }
+            }
+          }
+
           const totals = calcTotals(itemList);
           const order = await prisma.order.create({
             data: {
