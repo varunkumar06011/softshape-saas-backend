@@ -52,8 +52,16 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
       owner: { id: owner.id, name: owner.name, email: owner.email, slug: owner.slug, onboardingStep: owner.onboardingStep },
     });
   } catch (err: any) {
-    console.error('[auth/register]', err);
-    res.status(500).json({ error: 'Registration failed' });
+    console.error('[auth/register] ERROR:', err.message, err.stack);
+    if (err.code === 'P1001') {
+      res.status(503).json({ error: 'Database is temporarily unavailable. Please try again in 30 seconds.' });
+      return;
+    }
+    if (err.code === 'P2002') {
+      res.status(409).json({ error: 'An account with this email or slug already exists' });
+      return;
+    }
+    res.status(500).json({ error: err.message || 'Registration failed' });
   }
 });
 

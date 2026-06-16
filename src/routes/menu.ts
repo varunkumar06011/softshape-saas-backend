@@ -7,6 +7,19 @@ import multer from 'multer';
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
+// ── Helpers ──
+function parseVariants(variantsStr?: string | null) {
+  if (!variantsStr) return null;
+  try {
+    return JSON.stringify(
+      variantsStr.split('|').map((v: string) => {
+        const [name, price] = v.split(':');
+        return { name: name.trim(), price: Number(price) || 0 };
+      })
+    );
+  } catch { return null; }
+}
+
 // POST /api/menu/upload-csv
 router.post('/upload-csv', requireOwnerAuth, upload.single('file'), async (req: Request, res: Response): Promise<void> => {
   try {
@@ -19,46 +32,28 @@ router.post('/upload-csv', requireOwnerAuth, upload.single('file'), async (req: 
     const restaurantId = owner.restaurantId || owner.slug;
 
     const csvText = req.file.buffer.toString('utf-8');
-    const records = parse(csvText, {
-      columns: true,
-      skip_empty_lines: true,
-      trim: true,
-    }) as any[];
-
+    const records = parse(csvText, { columns: true, skip_empty_lines: true, trim: true }) as any[];
     if (records.length === 0) { res.status(400).json({ error: 'CSV is empty' }); return; }
 
     const requiredColumns = ['item_name', 'category', 'price', 'type'];
     const firstRow = records[0];
     const missingCols = requiredColumns.filter(col => !(col in firstRow));
     if (missingCols.length > 0) {
-      res.status(400).json({ error: `Missing columns: ${missingCols.join(', ')}. Required: item_name, category, price, type, is_veg, variants` });
+      res.status(400).json({ error: `Missing columns: ${missingCols.join(', ')}` });
       return;
     }
 
-    const items = records.map((row: any) => {
-      let variants = null;
-      if (row.variants) {
-        try {
-          variants = JSON.stringify(
-            row.variants.split('|').map((v: string) => {
-              const [name, price] = v.split(':');
-              return { name: name.trim(), price: Number(price) || 0 };
-            })
-          );
-        } catch { variants = null; }
-      }
-      return {
-        ownerId, restaurantId,
-        itemName: row.item_name,
-        category: row.category,
-        price: Number(row.price) || 0,
-        menuType: (row.type || 'FOOD').toUpperCase(),
-        isVeg: row.is_veg === 'true' || row.is_veg === '1' || row.is_veg === 'yes',
-        variants,
-      };
-    });
+    const items = records.map((row: any) => ({
+      ownerId, restaurantId,
+      itemName: row.item_name,
+      category: row.category,
+      price: Number(row.price) || 0,
+      menuType: (row.type || 'FOOD').toUpperCase(),
+      isVeg: row.is_veg === 'true' || row.is_veg === '1' || row.is_veg === 'yes',
+      station: (row.station || 'KITCHEN').toUpperCase(),
+      variants: parseVariants(row.variants),
+    }));
 
-    // Replace existing items with uploaded ones
     await prisma.tenantMenuItem.deleteMany({ where: { ownerId } });
     await prisma.tenantMenuItem.createMany({ data: items });
 
@@ -75,7 +70,7 @@ router.post('/upload-csv', requireOwnerAuth, upload.single('file'), async (req: 
   }
 });
 
-// GET /api/menu/:restaurantId — returns menu for a tenant's cashier/captain dashboards
+// GET /api/menu/:restaurantId — menu for cashier/captain dashboards
 router.get('/:restaurantId', async (req: Request, res: Response): Promise<void> => {
   try {
     const { restaurantId } = req.params;
@@ -86,13 +81,14 @@ router.get('/:restaurantId', async (req: Request, res: Response): Promise<void> 
 
     const items = await prisma.tenantMenuItem.findMany({ where, orderBy: [{ category: 'asc' }, { itemName: 'asc' }] });
 
-    // Group by category
     const grouped: Record<string, any[]> = {};
     for (const item of items) {
       if (!grouped[item.category]) grouped[item.category] = [];
       grouped[item.category].push({
         id: item.id, name: item.itemName, price: item.price,
         menuType: item.menuType, isVeg: item.isVeg,
+        station: item.station, imageUrl: item.imageUrl,
+        isSpecial: item.isSpecial, specialNote: item.specialNote,
         variants: item.variants ? JSON.parse(item.variants) : [],
       });
     }
@@ -100,6 +96,133 @@ router.get('/:restaurantId', async (req: Request, res: Response): Promise<void> 
     res.json({ categories: grouped, total: items.length });
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch menu' });
+  }
+});
+
+// GET /api/menu/:restaurantId/specials — today's specials (public)
+router.get('/:restaurantId/specials', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { restaurantId } = req.params;
+    const items = await prisma.tenantMenuItem.findMany({
+      where: { restaurantId, isSpecial: true, isActive: true },
+      orderBy: { createdAt: 'desc' },
+    });
+    res.json(items.map(i => ({
+      id: i.id, name: i.itemName, price: i.price, category: i.category,
+      isVeg: i.isVeg, imageUrl: i.imageUrl, specialNote: i.specialNote,
+      menuType: i.menuType, station: i.station,
+    })));
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch specials' });
+  }
+});
+
+// POST /api/menu/item — add single item manually
+router.post('/item', requireOwnerAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { ownerId } = (req as any).owner;
+    const owner = await prisma.owner.findUnique({ where: { id: ownerId } });
+    if (!owner) { res.status(404).json({ error: 'Owner not found' }); return; }
+
+    const { itemName, category, price, isVeg, menuType, station, variants, imageUrl, isSpecial, specialNote } = req.body;
+    if (!itemName || !category || price == null) {
+      res.status(400).json({ error: 'itemName, category, and price are required' });
+      return;
+    }
+
+    const item = await prisma.tenantMenuItem.create({
+      data: {
+        ownerId,
+        restaurantId: owner.restaurantId || owner.slug,
+        itemName,
+        category,
+        price: Number(price),
+        isVeg: isVeg !== false,
+        menuType: (menuType || 'FOOD').toUpperCase(),
+        station: (station || 'KITCHEN').toUpperCase(),
+        variants: variants ? JSON.stringify(variants) : null,
+        imageUrl: imageUrl || null,
+        isSpecial: isSpecial === true,
+        specialNote: specialNote || null,
+      },
+    });
+
+    res.json(item);
+  } catch (err: any) {
+    console.error('[menu/item]', err);
+    res.status(500).json({ error: err.message || 'Failed to create item' });
+  }
+});
+
+// PATCH /api/menu/item/:id — update single item
+router.patch('/item/:id', requireOwnerAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { ownerId } = (req as any).owner;
+    const { id } = req.params;
+    const { itemName, category, price, isVeg, menuType, station, isActive, isSpecial, specialNote, imageUrl, variants } = req.body;
+
+    const data: any = {};
+    if (itemName !== undefined) data.itemName = itemName;
+    if (category !== undefined) data.category = category;
+    if (price !== undefined) data.price = Number(price);
+    if (isVeg !== undefined) data.isVeg = isVeg;
+    if (menuType !== undefined) data.menuType = menuType.toUpperCase();
+    if (station !== undefined) data.station = station.toUpperCase();
+    if (isActive !== undefined) data.isActive = isActive;
+    if (isSpecial !== undefined) data.isSpecial = isSpecial;
+    if (specialNote !== undefined) data.specialNote = specialNote;
+    if (imageUrl !== undefined) data.imageUrl = imageUrl;
+    if (variants !== undefined) data.variants = variants ? JSON.stringify(variants) : null;
+
+    const item = await prisma.tenantMenuItem.updateMany({
+      where: { id, ownerId },
+      data,
+    });
+
+    if (item.count === 0) { res.status(404).json({ error: 'Item not found' }); return; }
+    res.json({ updated: true });
+  } catch (err: any) {
+    console.error('[menu/item/patch]', err);
+    res.status(500).json({ error: err.message || 'Failed to update item' });
+  }
+});
+
+// DELETE /api/menu/item/:id — soft delete (set isActive false)
+router.delete('/item/:id', requireOwnerAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { ownerId } = (req as any).owner;
+    const { id } = req.params;
+
+    await prisma.tenantMenuItem.updateMany({
+      where: { id, ownerId },
+      data: { isActive: false },
+    });
+
+    res.json({ deleted: true });
+  } catch (err: any) {
+    console.error('[menu/item/delete]', err);
+    res.status(500).json({ error: err.message || 'Failed to delete item' });
+  }
+});
+
+// POST /api/menu/upload-image — upload item photo (base64 data URL)
+router.post('/upload-image', requireOwnerAuth, upload.single('image'), async (req: Request, res: Response): Promise<void> => {
+  try {
+    if (!req.file) { res.status(400).json({ error: 'No image uploaded' }); return; }
+
+    const allowed = ['image/jpeg', 'image/png', 'image/webp'];
+    if (!allowed.includes(req.file.mimetype)) {
+      res.status(400).json({ error: 'Only JPEG, PNG, WebP allowed' });
+      return;
+    }
+
+    const base64 = req.file.buffer.toString('base64');
+    const imageUrl = `data:${req.file.mimetype};base64,${base64}`;
+
+    res.json({ imageUrl });
+  } catch (err: any) {
+    console.error('[menu/upload-image]', err);
+    res.status(500).json({ error: err.message || 'Upload failed' });
   }
 });
 
