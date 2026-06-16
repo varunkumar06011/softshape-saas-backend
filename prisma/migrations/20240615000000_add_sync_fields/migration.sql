@@ -1,28 +1,21 @@
--- Add Order table with sync fields
-CREATE TABLE IF NOT EXISTS "Order" (
-  id TEXT PRIMARY KEY DEFAULT gen_random_uuid(),
-  "restaurantId" TEXT NOT NULL,
-  "tableId" TEXT,
-  items TEXT DEFAULT '[]',
-  status TEXT DEFAULT 'RUNNING',
-  source TEXT DEFAULT 'DINE_IN',
-  "paymentMode" TEXT,
-  subtotal FLOAT,
-  cgst FLOAT,
-  sgst FLOAT,
-  total FLOAT,
-  "paidAt" TIMESTAMP(3),
-  "clientId" TEXT UNIQUE,
-  "deviceId" TEXT,
-  "syncedAt" TIMESTAMP(3),
-  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
+-- Add sync columns to existing Order table (if not already present)
+ALTER TABLE "Order" ADD COLUMN IF NOT EXISTS "clientId" TEXT;
+ALTER TABLE "Order" ADD COLUMN IF NOT EXISTS "deviceId" TEXT;
+ALTER TABLE "Order" ADD COLUMN IF NOT EXISTS "syncedAt" TIMESTAMP(3);
 
-CREATE INDEX IF NOT EXISTS "idx_order_restaurantId" ON "Order"("restaurantId");
-CREATE INDEX IF NOT EXISTS "idx_order_status" ON "Order"(status);
-CREATE INDEX IF NOT EXISTS "idx_order_clientId" ON "Order"("clientId");
-CREATE INDEX IF NOT EXISTS "idx_order_paidAt" ON "Order"("paidAt");
+-- Add unique constraint on clientId if not exists
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_indexes WHERE indexname = 'Order_clientId_key'
+  ) THEN
+    CREATE UNIQUE INDEX "Order_clientId_key" ON "Order"("clientId");
+  END IF;
+END
+$$;
+
+-- Add indexes if not exist
+CREATE INDEX IF NOT EXISTS "idx_order_syncedAt" ON "Order"("syncedAt");
 
 -- Materialized view for reports (Prompt 9)
 CREATE MATERIALIZED VIEW IF NOT EXISTS daily_revenue_mv AS
