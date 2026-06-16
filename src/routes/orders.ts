@@ -643,4 +643,111 @@ router.get('/search/:restaurantId', async (req: Request, res: Response): Promise
   }
 });
 
+// ── Digital Bill Helpers ──
+function formatBillText(order: any, restaurantName: string): string {
+  const items = order.items?.map((it: any) => `${it.name} x${it.qty}  ₹${Math.round(it.price * it.qty)}`).join('\n') || '';
+  const subtotal = Math.round(order.subtotal || 0);
+  const cgst = Math.round(order.cgst || 0);
+  const sgst = Math.round(order.sgst || 0);
+  const total = Math.round(order.total || 0);
+  const payment = order.paymentMode || 'Cash';
+  const billNo = order.billNumber || 'N/A';
+  const table = order.tableName || 'N/A';
+
+  return `🧾 *Bill from ${restaurantName}*\nTable: ${table} | Bill No: ${billNo}\n--------------------------------\n${items}\n--------------------------------\nSubtotal: ₹${subtotal}\nCGST(2.5%): ₹${cgst}\nSGST(2.5%): ₹${sgst}\n*Total: ₹${total}*\nPayment: ${payment}\nThank you! 🙏`;
+}
+
+async function sendWhatsApp(phone: string, message: string): Promise<'sent' | 'failed'> {
+  const WABA_TOKEN = process.env.WHATSAPP_TOKEN;
+  const PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_ID;
+  if (!WABA_TOKEN || !PHONE_NUMBER_ID) return 'failed';
+
+  try {
+    const res = await fetch(
+      `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${WABA_TOKEN}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messaging_product: 'whatsapp',
+          to: `91${phone}`,
+          type: 'text',
+          text: { body: message },
+        }),
+      }
+    );
+    return res.ok ? 'sent' : 'failed';
+  } catch {
+    return 'failed';
+  }
+}
+
+async function sendSMS(phone: string, message: string): Promise<'sent' | 'failed'> {
+  const AUTH_KEY = process.env.MSG91_AUTH_KEY;
+  const SENDER_ID = process.env.MSG91_SENDER_ID || 'SOFTSH';
+  if (!AUTH_KEY) return 'failed';
+
+  try {
+    const res = await fetch('https://api.msg91.com/api/v5/flow/', {
+      method: 'POST',
+      headers: {
+        authkey: AUTH_KEY,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        sender: SENDER_ID,
+        route: '4',
+        country: '91',
+        sms: [{ message, to: [phone] }],
+      }),
+    });
+    return res.ok ? 'sent' : 'failed';
+  } catch {
+    return 'failed';
+  }
+}
+
+// POST /api/orders/:id/send-digital-bill
+router.post('/:id/send-digital-bill', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { phone, channels, order: clientOrder } = req.body;
+    const order = await prisma.order.findUnique({ where: { id: req.params.id }, include: { items: true } });
+    if (!order) { res.status(404).json({ error: 'Order not found' }); return; }
+
+    const owner = await prisma.owner.findUnique({ where: { id: order.ownerId }, select: { restaurantName: true } });
+    const restaurantName = owner?.restaurantName || 'Restaurant';
+    const billText = formatBillText(order, restaurantName);
+
+    const results: Record<string, 'sent' | 'failed'> = {};
+    if (channels.includes('whatsapp')) results.whatsapp = await sendWhatsApp(phone, billText);
+    if (channels.includes('sms')) results.sms = await sendSMS(phone, billText);
+
+    await prisma.auditLog.create({
+      data: {
+        ownerId: order.ownerId,
+        restaurantId: order.restaurantId,
+        action: 'DIGITAL_BILL_SENT',
+        targetId: order.id,
+        targetType: 'Order',
+        performedBy: 'system',
+        performedByUsername: 'system',
+        details: { phone, channels, results },
+      }
+    });
+
+    await prisma.order.update({
+      where: { id: order.id },
+      data: { customerPhone: phone },
+    });
+
+    res.json({ success: true, results });
+  } catch (err: any) {
+    console.error('[orders/send-digital-bill]', err);
+    res.status(500).json({ error: 'Failed to send digital bill' });
+  }
+});
+
 export default router;

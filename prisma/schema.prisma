@@ -197,6 +197,7 @@ model Order {
   excludedReason String?
   discountAmount Float    @default(0)
   discountReason String?
+  customerPhone  String?
   items         OrderItem[]
   clientId      String?     @unique
   deviceId      String?
