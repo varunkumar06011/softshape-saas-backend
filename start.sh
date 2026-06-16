@@ -2,7 +2,7 @@
 set -e
 
 echo "Resolving failed migration..."
-npx prisma migrate resolve --applied 20240615000000_add_sync_fields
+npx prisma migrate resolve --rolled-back 20240615000000_add_sync_fields || true
 
 echo "Running pending migrations..."
 npx prisma migrate deploy
