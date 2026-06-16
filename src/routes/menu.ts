@@ -20,6 +20,20 @@ function parseVariants(variantsStr?: string | null) {
   } catch { return null; }
 }
 
+function normalizeColumn(key: string): string {
+  return key.trim().toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+}
+
+function findColumn(row: any, ...candidates: string[]): string | undefined {
+  const keys = Object.keys(row);
+  for (const cand of candidates) {
+    const norm = normalizeColumn(cand);
+    const found = keys.find(k => normalizeColumn(k) === norm);
+    if (found) return row[found];
+  }
+  return undefined;
+}
+
 // POST /api/menu/upload-csv
 router.post('/upload-csv', requireOwnerAuth, upload.single('file'), async (req: Request, res: Response): Promise<void> => {
   try {
@@ -35,24 +49,43 @@ router.post('/upload-csv', requireOwnerAuth, upload.single('file'), async (req: 
     const records = parse(csvText, { columns: true, skip_empty_lines: true, trim: true }) as any[];
     if (records.length === 0) { res.status(400).json({ error: 'CSV is empty' }); return; }
 
-    const requiredColumns = ['item_name', 'category', 'price', 'type'];
     const firstRow = records[0];
-    const missingCols = requiredColumns.filter(col => !(col in firstRow));
+    const itemNameCol = findColumn(firstRow, 'item_name', 'itemname', 'name', 'item', 'dish', 'dishname', 'dish_name', 'menu_item');
+    const categoryCol = findColumn(firstRow, 'category', 'cat', 'type', 'section', 'group', 'menu_category');
+    const priceCol    = findColumn(firstRow, 'price', 'cost', 'mrp', 'rate', 'amount', 'value', 'price_inr');
+    const typeCol     = findColumn(firstRow, 'type', 'menu_type', 'menutype', 'food_type', 'foodtype', 'item_type', 'itemtype');
+
+    const missingCols: string[] = [];
+    if (itemNameCol === undefined) missingCols.push('item_name');
+    if (categoryCol === undefined) missingCols.push('category');
+    if (priceCol === undefined) missingCols.push('price');
+    if (typeCol === undefined) missingCols.push('type');
+
     if (missingCols.length > 0) {
-      res.status(400).json({ error: `Missing columns: ${missingCols.join(', ')}` });
+      res.status(400).json({ error: `Missing columns: ${missingCols.join(', ')}. Your columns: ${Object.keys(firstRow).join(', ')}` });
       return;
     }
 
-    const items = records.map((row: any) => ({
-      ownerId, restaurantId,
-      itemName: row.item_name,
-      category: row.category,
-      price: Number(row.price) || 0,
-      menuType: (row.type || 'FOOD').toUpperCase(),
-      isVeg: row.is_veg === 'true' || row.is_veg === '1' || row.is_veg === 'yes',
-      station: (row.station || 'KITCHEN').toUpperCase(),
-      variants: parseVariants(row.variants),
-    }));
+    const items = records.map((row: any) => {
+      const itemName = findColumn(row, 'item_name', 'itemname', 'name', 'item', 'dish', 'dishname', 'dish_name', 'menu_item') || '';
+      const category = findColumn(row, 'category', 'cat', 'type', 'section', 'group', 'menu_category') || '';
+      const priceRaw = findColumn(row, 'price', 'cost', 'mrp', 'rate', 'amount', 'value', 'price_inr') || '0';
+      const typeRaw  = findColumn(row, 'type', 'menu_type', 'menutype', 'food_type', 'foodtype', 'item_type', 'itemtype') || 'FOOD';
+      const isVegRaw = findColumn(row, 'is_veg', 'isveg', 'veg', 'vegetarian', 'pure_veg', 'pureveg');
+      const stationRaw = findColumn(row, 'station', 'prep_station', 'kitchen', 'bar', 'prepstation');
+      const variantsRaw = findColumn(row, 'variants', 'variant', 'options', 'sizes', 'portion');
+
+      return {
+        ownerId, restaurantId,
+        itemName,
+        category,
+        price: Number(priceRaw) || 0,
+        menuType: String(typeRaw).toUpperCase(),
+        isVeg: String(isVegRaw).toLowerCase() === 'true' || String(isVegRaw) === '1' || String(isVegRaw).toLowerCase() === 'yes' || String(isVegRaw).toLowerCase() === 'veg',
+        station: (stationRaw || 'KITCHEN').toUpperCase(),
+        variants: parseVariants(variantsRaw),
+      };
+    });
 
     await prisma.tenantMenuItem.deleteMany({ where: { ownerId } });
     await prisma.tenantMenuItem.createMany({ data: items });
