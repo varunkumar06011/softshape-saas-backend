@@ -126,6 +126,34 @@ router.post('/verify', async (req: Request, res: Response): Promise<void> => {
   }
 });
 
+// POST /api/payment/activate — demo mode activation (no Razorpay required)
+router.post('/activate', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { ownerId } = (req as any).owner;
+    const { planId } = req.body;
+    const plan = getPlanConfig(planId || 'pro');
+    const now = new Date();
+    const expiresAt = new Date(now);
+    expiresAt.setFullYear(expiresAt.getFullYear() + 1);
+
+    await prisma.owner.update({
+      where: { id: ownerId },
+      data: {
+        isActive: true,
+        plan: plan.id as any,
+        planPaidAt: now,
+        planExpiresAt: expiresAt,
+        onboardingStep: 'PAYMENT_DONE',
+      },
+    });
+
+    res.json({ success: true, message: 'Account activated' });
+  } catch (err: any) {
+    console.error('[payment/activate]', err);
+    res.status(500).json({ error: 'Activation failed' });
+  }
+});
+
 // POST /api/payment/webhook — Razorpay webhook (configure in Razorpay dashboard)
 // Webhook URL: https://your-saas-backend.com/api/payment/webhook
 router.post('/webhook', async (req: Request, res: Response): Promise<void> => {

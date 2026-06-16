@@ -45,7 +45,9 @@ router.post('/upload-csv', requireOwnerAuth, upload.single('file'), async (req: 
 
     const restaurantId = owner.restaurantId || owner.slug;
 
-    const csvText = req.file.buffer.toString('utf-8');
+    let csvText = req.file.buffer.toString('utf-8');
+    // Strip UTF-8 BOM if present (common in Excel-exported CSVs)
+    if (csvText.charCodeAt(0) === 0xFEFF) csvText = csvText.slice(1);
     const records = parse(csvText, { columns: true, skip_empty_lines: true, trim: true }) as any[];
     if (records.length === 0) { res.status(400).json({ error: 'CSV is empty' }); return; }
 
