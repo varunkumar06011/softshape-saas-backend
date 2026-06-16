@@ -149,4 +149,23 @@ router.post('/step4', async (req: Request, res: Response): Promise<void> => {
   }
 });
 
+// PATCH /api/onboarding/bill-template
+router.patch('/bill-template', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { ownerId } = (req as any).owner;
+    const { billTemplate } = req.body;
+    if (!billTemplate || !['CLASSIC', 'MINIMAL', 'HOTEL'].includes(billTemplate)) {
+      res.status(400).json({ error: 'Invalid bill template. Must be CLASSIC, MINIMAL, or HOTEL' });
+      return;
+    }
+    const owner = await prisma.owner.update({
+      where: { id: ownerId },
+      data: { billTemplate },
+    });
+    res.json({ message: 'Bill template updated', billTemplate: owner.billTemplate });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update bill template' });
+  }
+});
+
 export default router;

@@ -77,7 +77,7 @@ router.post('/:slug/login', async (req: Request, res: Response): Promise<void> =
       if (!valid || cred.username !== username) { res.status(401).json({ error: 'Invalid credentials' }); return; }
 
       const token = signTenantToken({ restaurantId, slug, role: 'admin', menuUploaded });
-      res.json({ token, session: { restaurantId, slug, role: 'admin', menuUploaded, restaurantName: owner.restaurantName } });
+      res.json({ token, session: { restaurantId, slug, role: 'admin', menuUploaded, restaurantName: owner.restaurantName, billTemplate: owner.billTemplate } });
       return;
     }
 
@@ -89,7 +89,7 @@ router.post('/:slug/login', async (req: Request, res: Response): Promise<void> =
       if (!valid || station.username !== username) { res.status(401).json({ error: 'Invalid credentials' }); return; }
 
       const token = signTenantToken({ restaurantId, slug, role: 'cashier', stationId: station.id, menuFilter: station.menuFilter, menuUploaded, allowedSections: station.allowedSections || '[]', handleOnlineOrders: station.handleOnlineOrders });
-      res.json({ token, session: { restaurantId, slug, role: 'cashier', stationId: station.id, stationName: station.stationName, menuFilter: station.menuFilter, menuUploaded, allowedSections: station.allowedSections || '[]', handleOnlineOrders: station.handleOnlineOrders, restaurantName: owner.restaurantName } });
+      res.json({ token, session: { restaurantId, slug, role: 'cashier', stationId: station.id, stationName: station.stationName, menuFilter: station.menuFilter, menuUploaded, allowedSections: station.allowedSections || '[]', handleOnlineOrders: station.handleOnlineOrders, restaurantName: owner.restaurantName, billTemplate: owner.billTemplate } });
       return;
     }
 
@@ -99,7 +99,7 @@ router.post('/:slug/login', async (req: Request, res: Response): Promise<void> =
       if (captain.pin !== String(password)) { res.status(401).json({ error: 'Invalid PIN' }); return; }
 
       const token = signTenantToken({ restaurantId, slug, role: 'captain', captainId: captain.id, menuUploaded });
-      res.json({ token, session: { restaurantId, slug, role: 'captain', captainId: captain.id, captainName: captain.captainName, menuUploaded, restaurantName: owner.restaurantName } });
+      res.json({ token, session: { restaurantId, slug, role: 'captain', captainId: captain.id, captainName: captain.captainName, menuUploaded, restaurantName: owner.restaurantName, billTemplate: owner.billTemplate } });
       return;
     }
 
