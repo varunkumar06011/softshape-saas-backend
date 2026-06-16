@@ -99,4 +99,31 @@ router.get('/audit-log', requireTenantAdminAuth, async (req: Request, res: Respo
   }
 });
 
+// GET /api/admin/captain-stats?restaurantId=X&from=DATE&to=DATE
+router.get('/captain-stats', requireTenantAdminAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { restaurantId, from, to } = req.query;
+    if (!restaurantId) { res.status(400).json({ error: 'restaurantId required' }); return; }
+
+    const fromDate = from ? new Date(String(from)) : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const toDate = to ? new Date(String(to)) : new Date();
+    toDate.setHours(23, 59, 59, 999);
+
+    const stats = await prisma.$queryRaw`
+      SELECT "captainName", COUNT(*)::int as orders, SUM("total")::float as revenue
+      FROM "Order"
+      WHERE "restaurantId" = ${String(restaurantId)}
+        AND status = 'SETTLED'
+        AND "createdAt" BETWEEN ${fromDate} AND ${toDate}
+      GROUP BY "captainName"
+      ORDER BY revenue DESC
+    `;
+
+    res.json(stats);
+  } catch (err: any) {
+    console.error('[admin/captain-stats]', err);
+    res.status(500).json({ error: 'Failed to fetch captain stats' });
+  }
+});
+
 export default router;

@@ -48,9 +48,26 @@ model Owner {
   orders       Order[]
   onlineOrders OnlineOrder[]
   auditLogs    AuditLog[]
+  inventory    InventoryItem[]
 
   @@index([slug])
   @@index([email])
+}
+
+model InventoryItem {
+  id            String   @id @default(cuid())
+  ownerId       String
+  owner         Owner    @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  restaurantId  String
+  menuItemId    String?
+  name          String
+  unit          String   @default("pcs")
+  currentStock  Float    @default(0)
+  lowStockAlert Float    @default(10)
+  updatedAt     DateTime @updatedAt
+  createdAt     DateTime @default(now())
+
+  @@index([restaurantId])
 }
 
 model TenantSection {
