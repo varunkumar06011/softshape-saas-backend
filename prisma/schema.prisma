@@ -32,6 +32,7 @@ model Owner {
   restaurantType     String?
   outletCount        String?
   billTemplate       String    @default("CLASSIC")
+  barGstin           String?
   restaurantId       String?   @unique
   swiggyStoreId      String?
   zomatoOutletId     String?

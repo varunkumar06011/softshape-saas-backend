@@ -69,6 +69,86 @@ router.get('/orders/:restaurantId', async (req: Request, res: Response): Promise
   }
 });
 
+// GET /api/urbanpiper/orders/:restaurantId/sync — sync online orders from Swiggy/Zomato
+router.get('/orders/:restaurantId/sync', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { restaurantId } = req.params;
+    const owner = await prisma.owner.findUnique({
+      where: { restaurantId },
+      select: { id: true, swiggyStoreId: true, zomatoOutletId: true },
+    });
+    if (!owner) { res.status(404).json({ error: 'Restaurant not found' }); return; }
+
+    let synced = 0;
+    const now = new Date();
+
+    // Mock Swiggy sync
+    if (owner.swiggyStoreId) {
+      const mockSwiggyOrders = [
+        {
+          platformOrderId: `SWIGGY_${owner.swiggyStoreId}_${Date.now()}`,
+          customerName: 'Swiggy Customer',
+          items: [{ name: 'Butter Chicken', qty: 1, price: 320 }],
+          subtotal: 320, taxes: 40, total: 360,
+          status: 'NEW', autoAccepted: false,
+        },
+      ];
+      for (const o of mockSwiggyOrders) {
+        await prisma.onlineOrder.upsert({
+          where: { platformOrderId: o.platformOrderId },
+          update: { status: o.status, updatedAt: now },
+          create: {
+            ownerId: owner.id, restaurantId,
+            platform: 'SWIGGY',
+            platformOrderId: o.platformOrderId,
+            customerName: o.customerName,
+            customerPhone: null,
+            items: o.items as any,
+            subtotal: o.subtotal, taxes: o.taxes, total: o.total,
+            status: o.status, autoAccepted: o.autoAccepted,
+          },
+        });
+        synced++;
+      }
+    }
+
+    // Mock Zomato sync
+    if (owner.zomatoOutletId) {
+      const mockZomatoOrders = [
+        {
+          platformOrderId: `ZOMATO_${owner.zomatoOutletId}_${Date.now()}`,
+          customerName: 'Zomato Customer',
+          items: [{ name: 'Paneer Tikka', qty: 1, price: 250 }],
+          subtotal: 250, taxes: 31, total: 281,
+          status: 'NEW', autoAccepted: false,
+        },
+      ];
+      for (const o of mockZomatoOrders) {
+        await prisma.onlineOrder.upsert({
+          where: { platformOrderId: o.platformOrderId },
+          update: { status: o.status, updatedAt: now },
+          create: {
+            ownerId: owner.id, restaurantId,
+            platform: 'ZOMATO',
+            platformOrderId: o.platformOrderId,
+            customerName: o.customerName,
+            customerPhone: null,
+            items: o.items as any,
+            subtotal: o.subtotal, taxes: o.taxes, total: o.total,
+            status: o.status, autoAccepted: o.autoAccepted,
+          },
+        });
+        synced++;
+      }
+    }
+
+    res.json({ synced });
+  } catch (err: any) {
+    console.error('[urbanpiper/sync]', err);
+    res.status(500).json({ error: 'Sync failed' });
+  }
+});
+
 // PATCH /api/urbanpiper/orders/:id/status — update order status
 router.patch('/orders/:id/status', async (req: Request, res: Response): Promise<void> => {
   try {

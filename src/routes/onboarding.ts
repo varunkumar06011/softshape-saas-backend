@@ -110,7 +110,7 @@ router.post('/step4', async (req: Request, res: Response): Promise<void> => {
           ownerId, restaurantId,
           stationName: s.stationName,
           stationType: s.stationType || 'DINING',
-          menuFilter: s.menuFilter || 'FOOD',
+          menuFilter: s.stationType?.toLowerCase() === 'bar' ? 'BOTH' : (s.menuFilter || 'FOOD'),
           username: s.username,
           passwordHash: await bcrypt.default.hash(s.password, 10),
         }))),
@@ -165,6 +165,26 @@ router.patch('/bill-template', async (req: Request, res: Response): Promise<void
     res.json({ message: 'Bill template updated', billTemplate: owner.billTemplate });
   } catch (err) {
     res.status(500).json({ error: 'Failed to update bill template' });
+  }
+});
+
+// PATCH /api/onboarding/bill-details
+router.patch('/bill-details', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { ownerId } = (req as any).owner;
+    const { billRestaurantName, billAddress, billGstin, barGstin } = req.body;
+    await prisma.owner.update({
+      where: { id: ownerId },
+      data: {
+        ...(billRestaurantName && { restaurantName: billRestaurantName }),
+        ...(billAddress && { address: billAddress }),
+        ...(billGstin !== undefined && { gstin: billGstin || null }),
+        ...(barGstin !== undefined && { barGstin: barGstin || null }),
+      },
+    });
+    res.json({ message: 'Bill details saved' });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to save bill details' });
   }
 });
 

@@ -1,0 +1,1 @@
+ALTER TABLE "Owner" ADD COLUMN "barGstin" TEXT;

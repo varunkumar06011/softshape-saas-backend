@@ -121,7 +121,7 @@ router.post('/suggest-from-csv', requireOwnerAuth, upload.single('file'), async 
 });
 
 function buildPDFPrompt(pdfText: string) {
-  return `You are a restaurant menu expert. Extract every menu item from the following text scraped from a PDF menu.
+  return `You are a restaurant menu expert. Extract every menu item from the following text scraped from a PDF menu (like VGrand menu format).
 
 Return ONLY a valid JSON array. No markdown, no explanation.
 
@@ -142,13 +142,16 @@ Return format (JSON array):
 ]
 
 Rules:
-- Any alcohol → menuType: LIQUOR, station: BAR, isVeg: false
-- mocktail / fresh juice / lassi / milkshake → menuType: FOOD, station: BAR
-- All food → menuType: FOOD, station: KITCHEN
-- paneer, dal, veg, aloo, palak, gobi, chana, mushroom, tofu, idli, dosa, puri, bread, naan, roti, rice (not biryani), gulab, kheer, halwa → isVeg: true
-- chicken, mutton, fish, prawn, egg, crab, lamb, beef, pork, seafood, biryani with meat → isVeg: false
-- If a price is listed as a range (e.g. 280/320), use the lower price
-- Skip headers, footers, addresses, phone numbers — only real menu items`;
+- Multi-page PDFs: section headers above items indicate category (SOUPS, STARTERS, BIRYANIS, etc.). Infer category from the nearest section header above each item.
+- Price formats: ₹120, 120/-, 120/, 120, Rs.120 — all valid. Extract numeric price only.
+- If a price is listed as a range (e.g. 280/320), use the lower price.
+- Veg/Non-veg symbols: ● or V or green dot → isVeg: true. ▲ or NV or red dot → isVeg: false.
+- menuType inference: if section header contains "BEER", "SPIRITS", "WINE", "LIQUOR", "BAR", "COCKTAILS" → menuType: "LIQUOR", station: "BAR"; else menuType: "FOOD", station: "KITCHEN".
+- Any alcohol item (rum, whisky, beer, wine, vodka, gin, cocktail) → menuType: LIQUOR, station: BAR, isVeg: false.
+- mocktail / fresh juice / lassi / milkshake → menuType: FOOD, station: BAR.
+- paneer, dal, veg, aloo, palak, gobi, chana, mushroom, tofu, idli, dosa, puri, bread, naan, roti, rice (not biryani), gulab, kheer, halwa → isVeg: true.
+- chicken, mutton, fish, prawn, egg, crab, lamb, beef, pork, seafood, biryani with meat → isVeg: false.
+- Skip headers, footers, addresses, phone numbers — only real menu items.`;
 }
 
 async function callClaudePDF(text: string) {

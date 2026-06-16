@@ -99,6 +99,39 @@ router.get('/audit-log', requireTenantAdminAuth, async (req: Request, res: Respo
   }
 });
 
+// GET /api/admin/online-order-report/:restaurantId
+router.get('/online-order-report/:restaurantId', requireTenantAdminAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { restaurantId } = req.params;
+    const { from, to } = req.query;
+
+    const fromDate = from ? new Date(String(from)) : new Date(0);
+    const toDate = to ? new Date(String(to)) : new Date();
+    toDate.setHours(23, 59, 59, 999);
+
+    const orders = await prisma.onlineOrder.findMany({
+      where: {
+        restaurantId,
+        createdAt: { gte: fromDate, lte: toDate },
+      },
+    });
+
+    const swiggy = orders.filter(o => o.platform === 'SWIGGY');
+    const zomato = orders.filter(o => o.platform === 'ZOMATO');
+
+    const result = {
+      SWIGGY: { count: swiggy.length, total: swiggy.reduce((s, o) => s + o.total, 0) },
+      ZOMATO: { count: zomato.length, total: zomato.reduce((s, o) => s + o.total, 0) },
+      combined: { count: orders.length, total: orders.reduce((s, o) => s + o.total, 0) },
+    };
+
+    res.json(result);
+  } catch (err: any) {
+    console.error('[admin/online-order-report]', err);
+    res.status(500).json({ error: 'Failed to fetch online order report' });
+  }
+});
+
 // GET /api/admin/captain-stats?restaurantId=X&from=DATE&to=DATE
 router.get('/captain-stats', requireTenantAdminAuth, async (req: Request, res: Response): Promise<void> => {
   try {
