@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import prisma from '../lib/prisma';
 import { signTenantToken } from '../lib/jwt';
+import { requireOwnerAuth } from '../middleware/auth';
 
 const router = Router();
 
@@ -13,7 +14,7 @@ router.get('/sections/:restaurantId', async (req: Request, res: Response): Promi
     if (!owner) { res.status(404).json({ error: 'Restaurant not found' }); return; }
 
     const sections = await prisma.tenantSection.findMany({ where: { ownerId: owner.id } });
-    const tables: Array<{ id: string; label: string; section: string; status: string }> = [];
+    const tables: Array<{ id: string; label: string; section: string; sectionId: string; status: string }> = [];
 
     for (const section of sections) {
       for (let i = 1; i <= section.tableCount; i++) {
@@ -22,6 +23,7 @@ router.get('/sections/:restaurantId', async (req: Request, res: Response): Promi
           id: `${short}-${i}`,
           label: `${short}-${i}`,
           section: section.name,
+          sectionId: section.id,
           status: 'free',
         });
       }
@@ -31,6 +33,57 @@ router.get('/sections/:restaurantId', async (req: Request, res: Response): Promi
   } catch (err) {
     console.error('[tenant/sections]', err);
     res.status(500).json({ error: 'Failed to load sections' });
+  }
+});
+
+// POST /api/tenant/sections/:restaurantId — create new section (owner auth)
+router.post('/sections/:restaurantId', requireOwnerAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { restaurantId } = req.params;
+    const { name, tableCount = 0, tableCapacity = 4 } = req.body;
+    if (!name || typeof name !== 'string') { res.status(400).json({ error: 'Section name is required' }); return; }
+
+    const owner = await prisma.owner.findUnique({ where: { restaurantId } });
+    if (!owner) { res.status(404).json({ error: 'Restaurant not found' }); return; }
+
+    const section = await prisma.tenantSection.create({
+      data: { ownerId: owner.id, name, tableCount: Number(tableCount) || 0, tableCapacity: Number(tableCapacity) || 4 },
+    });
+    res.json({ message: 'Section created', section });
+  } catch (err: any) {
+    console.error('[tenant/sections POST]', err);
+    res.status(500).json({ error: err.message || 'Failed to create section' });
+  }
+});
+
+// PATCH /api/tenant/sections/:sectionId — update section (owner auth)
+router.patch('/sections/:sectionId', requireOwnerAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { sectionId } = req.params;
+    const { name, tableCount, tableCapacity } = req.body;
+
+    const data: any = {};
+    if (name !== undefined) data.name = name;
+    if (tableCount !== undefined) data.tableCount = Number(tableCount);
+    if (tableCapacity !== undefined) data.tableCapacity = Number(tableCapacity);
+
+    const section = await prisma.tenantSection.update({ where: { id: sectionId }, data });
+    res.json({ message: 'Section updated', section });
+  } catch (err: any) {
+    console.error('[tenant/sections PATCH]', err);
+    res.status(500).json({ error: err.message || 'Failed to update section' });
+  }
+});
+
+// DELETE /api/tenant/sections/:sectionId — delete section (owner auth)
+router.delete('/sections/:sectionId', requireOwnerAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { sectionId } = req.params;
+    await prisma.tenantSection.delete({ where: { id: sectionId } });
+    res.json({ message: 'Section deleted' });
+  } catch (err: any) {
+    console.error('[tenant/sections DELETE]', err);
+    res.status(500).json({ error: err.message || 'Failed to delete section' });
   }
 });
 
