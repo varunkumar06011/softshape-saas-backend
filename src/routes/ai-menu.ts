@@ -187,9 +187,14 @@ router.post('/suggest-from-pdf', requireOwnerAuth, upload.single('file'), async 
     if (!req.file) { res.status(400).json({ error: 'No file uploaded' }); return; }
     if (req.file.mimetype !== 'application/pdf') { res.status(400).json({ error: 'Only PDF files are accepted' }); return; }
 
+    if (!ANTHROPIC_API_KEY) {
+      res.status(500).json({ error: 'AI menu scanning is not configured on the server. Please contact support or use CSV upload.' });
+      return;
+    }
+
     const pdfData = await pdfParse(req.file.buffer);
     const text = pdfData.text?.trim();
-    if (!text || text.length < 10) { res.status(400).json({ error: 'Could not extract text from PDF' }); return; }
+    if (!text || text.length < 10) { res.status(400).json({ error: 'Could not extract text from PDF. The PDF may be image-based; try a text-based PDF or CSV upload.' }); return; }
 
     const suggestions = await callClaudePDF(text);
     res.json({ suggestions });
