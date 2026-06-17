@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import prisma from '../lib/prisma';
 import { signTenantToken } from '../lib/jwt';
-import { requireOwnerAuth } from '../middleware/auth';
+import { requireOwnerAuth, requireTenantAdminAuth } from '../middleware/auth';
 
 const router = Router();
 
@@ -36,8 +36,8 @@ router.get('/sections/:restaurantId', async (req: Request, res: Response): Promi
   }
 });
 
-// POST /api/tenant/sections/:restaurantId — create new section (owner auth)
-router.post('/sections/:restaurantId', requireOwnerAuth, async (req: Request, res: Response): Promise<void> => {
+// POST /api/tenant/sections/:restaurantId — create new section (admin auth)
+router.post('/sections/:restaurantId', requireTenantAdminAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const { restaurantId } = req.params;
     const { name, tableCount = 0, tableCapacity = 4 } = req.body;
@@ -56,8 +56,8 @@ router.post('/sections/:restaurantId', requireOwnerAuth, async (req: Request, re
   }
 });
 
-// PATCH /api/tenant/sections/:sectionId — update section (owner auth)
-router.patch('/sections/:sectionId', requireOwnerAuth, async (req: Request, res: Response): Promise<void> => {
+// PATCH /api/tenant/sections/:sectionId — update section (admin auth)
+router.patch('/sections/:sectionId', requireTenantAdminAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const { sectionId } = req.params;
     const { name, tableCount, tableCapacity } = req.body;
@@ -75,8 +75,8 @@ router.patch('/sections/:sectionId', requireOwnerAuth, async (req: Request, res:
   }
 });
 
-// DELETE /api/tenant/sections/:sectionId — delete section (owner auth)
-router.delete('/sections/:sectionId', requireOwnerAuth, async (req: Request, res: Response): Promise<void> => {
+// DELETE /api/tenant/sections/:sectionId — delete section (admin auth)
+router.delete('/sections/:sectionId', requireTenantAdminAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const { sectionId } = req.params;
     await prisma.tenantSection.delete({ where: { id: sectionId } });
