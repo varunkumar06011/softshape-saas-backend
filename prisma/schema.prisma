@@ -37,6 +37,21 @@ model Owner {
   swiggyStoreId      String?
   zomatoOutletId     String?
   urbanpiperLinked   Boolean   @default(false)
+
+  // Branding & Marketing
+  tagline            String?
+  primaryColor       String?   @default("#E53935")
+  websiteUrl         String?
+  fssaiLicense       String?
+  businessHoursOpen  String?
+  businessHoursClose String?
+
+  // Social Media
+  facebookPageUrl    String?
+  instagramHandle    String?
+  xHandle            String?
+  linkedinUrl        String?
+
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 

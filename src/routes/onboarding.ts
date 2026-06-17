@@ -22,12 +22,37 @@ router.get('/status', async (req: Request, res: Response): Promise<void> => {
 router.post('/step1', async (req: Request, res: Response): Promise<void> => {
   try {
     const { ownerId } = (req as any).owner;
-    const { restaurantName, address, gstin, cuisineType, seatingCapacity, logoUrl, swiggyStoreId, zomatoOutletId } = req.body;
+    const {
+      restaurantName, address, gstin, cuisineType, seatingCapacity, logoUrl,
+      swiggyStoreId, zomatoOutletId,
+      tagline, primaryColor, websiteUrl, fssaiLicense,
+      businessHoursOpen, businessHoursClose,
+      facebookPageUrl, instagramHandle, xHandle, linkedinUrl,
+    } = req.body;
     if (!restaurantName || !address) { res.status(400).json({ error: 'Restaurant name and address required' }); return; }
 
     const owner = await prisma.owner.update({
       where: { id: ownerId },
-      data: { restaurantName, address, gstin: gstin || null, cuisineType, seatingCapacity: seatingCapacity ? Number(seatingCapacity) : null, logoUrl: logoUrl || null, swiggyStoreId: swiggyStoreId || null, zomatoOutletId: zomatoOutletId || null, onboardingStep: 'DETAILS_SAVED' },
+      data: {
+        restaurantName, address,
+        gstin: gstin || null,
+        cuisineType: cuisineType || null,
+        seatingCapacity: seatingCapacity ? Number(seatingCapacity) : null,
+        logoUrl: logoUrl || null,
+        swiggyStoreId: swiggyStoreId || null,
+        zomatoOutletId: zomatoOutletId || null,
+        tagline: tagline || null,
+        primaryColor: primaryColor || null,
+        websiteUrl: websiteUrl || null,
+        fssaiLicense: fssaiLicense || null,
+        businessHoursOpen: businessHoursOpen || null,
+        businessHoursClose: businessHoursClose || null,
+        facebookPageUrl: facebookPageUrl || null,
+        instagramHandle: instagramHandle || null,
+        xHandle: xHandle || null,
+        linkedinUrl: linkedinUrl || null,
+        onboardingStep: 'DETAILS_SAVED',
+      },
     });
     res.json({ message: 'Step 1 saved', owner: { id: owner.id, onboardingStep: owner.onboardingStep } });
   } catch (err) { res.status(500).json({ error: 'Failed to save details' }); }
