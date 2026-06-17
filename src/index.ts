@@ -16,6 +16,7 @@ import adminRouter from './routes/admin';
 import urbanpiperRouter from './routes/urbanpiper';
 import aiMenuRouter from './routes/ai-menu';
 import marketingRouter from './routes/marketing';
+import socialRouter from './routes/social';
 import inventoryRouter from './routes/inventory';
 
 const app = express();
@@ -69,6 +70,7 @@ app.use('/api/admin', adminRouter);
 app.use('/api/urbanpiper', urbanpiperRouter);
 app.use('/api/ai-menu', aiMenuRouter);
 app.use('/api/marketing', marketingRouter);
+app.use('/api/social', socialRouter);
 app.use('/api/inventory', inventoryRouter);
 
 // 404

@@ -46,11 +46,19 @@ model Owner {
   businessHoursOpen  String?
   businessHoursClose String?
 
-  // Social Media
+  // Social Media (handles/URLs)
   facebookPageUrl    String?
   instagramHandle    String?
   xHandle            String?
   linkedinUrl        String?
+
+  // Social Media OAuth Access Tokens
+  metaAccessToken    String?
+  metaPageId         String?
+  metaIgAccountId    String?
+  xAccessToken       String?
+  xRefreshToken      String?
+  linkedinToken      String?
 
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
